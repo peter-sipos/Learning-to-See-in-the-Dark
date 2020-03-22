@@ -8,22 +8,28 @@ import numpy as np
 import rawpy
 import glob
 import random
-
+import matplotlib.pyplot as plt
+from scipy import misc
 
 input_dir = './dataset/Sony/short/'
 gt_dir = './dataset/Sony/long/'
-checkpoint_dir = './result_Sony/'
+checkpoint_dir = './results/result_Sony/'
 result_dir = './results/result_Sony/'
 
 # get train IDs
 train_fns = glob.glob(gt_dir + '0*.ARW')
 train_ids = [int(os.path.basename(train_fn)[0:5]) for train_fn in train_fns]
 
+# get validation IDs
+val_fns = glob.glob(gt_dir + '2*.ARW')
+val_ids = [int(os.path.basename(val_fn)[0:5]) for val_fn in val_fns]
+
 ps = 512  # patch size for training
 save_freq = 50
-selection_size = 10  # number of photos in selection
-epochs_to_train = 400
-epochs_for_selection = 20  # epoch to train on one selection
+selection_size = 75  # number of photos in selection
+epochs_to_train = 200
+amount_of_selections = 4  # number of different selections of images for training
+epochs_for_selection = round(epochs_to_train/amount_of_selections)  # epoch to train on one selection
 
 DEBUG = 0
 if DEBUG == 1:
@@ -122,14 +128,11 @@ if ckpt:
     print('loaded ' + ckpt.model_checkpoint_path)
     saver.restore(sess, ckpt.model_checkpoint_path)
 
-# Raw data takes long time to load. Keep them in memory after loaded.
-# gt_images = [None] * 6000
-# input_images = {}
-# input_images['300'] = [None] * len(train_ids)
-# input_images['250'] = [None] * len(train_ids)
-# input_images['100'] = [None] * len(train_ids)
 
 g_loss = np.zeros((5000, 1))
+val_g_loss = np.zeros((5000, 1))        #TODO toto zrejme nemusi byt az 5000?
+train_loss_list = []
+val_loss_list = []
 
 allfolders = glob.glob(result_dir + '*0')
 lastepoch = 0
@@ -138,9 +141,21 @@ for folder in allfolders:
 
 learning_rate = 1e-4
 
-selection = random.sample(train_ids, selection_size)
-selection_fns = [None] * len(selection)
+selection_ids = random.sample(train_ids, selection_size)
+selection_fns = [None] * len(selection_ids)
 
+first_run = True
+
+# to keep validation images in memory
+val_gt_images = [None] * 6000
+val_input_images = {}
+val_input_images['300'] = [None] * len(val_ids)
+val_input_images['250'] = [None] * len(val_ids)
+val_input_images['100'] = [None] * len(val_ids)
+
+epochs_trained_real_counter = 0
+
+# training
 for epoch in range(lastepoch, epochs_to_train + 1):
     if os.path.isdir(result_dir + '%04d' % epoch):
         continue
@@ -150,9 +165,12 @@ for epoch in range(lastepoch, epochs_to_train + 1):
 
     # counter = 0
 
-    if epoch % epochs_for_selection == 1 or epoch % epochs_for_selection == 0:
+    # loading new selection
+    if first_run or epoch % epochs_for_selection == 0:
 
-        selection = random.sample(train_ids, selection_size)
+        first_run = False
+
+        selection_ids = random.sample(train_ids, selection_size)
 
         #debug vypisy
         # print("aktualna selection je:")
@@ -162,13 +180,15 @@ for epoch in range(lastepoch, epochs_to_train + 1):
         gt_images = {}
         gt_images = [None] * 6000
         input_images = {}
-        input_images['300'] = [None] * len(selection)
-        input_images['250'] = [None] * len(selection)
-        input_images['100'] = [None] * len(selection)
+        input_images['300'] = [None] * len(selection_ids)
+        input_images['250'] = [None] * len(selection_ids)
+        input_images['100'] = [None] * len(selection_ids)
 
-        for ind in np.random.permutation(len(selection)):
+        print("Loading new photos to memory")
+
+        for ind in np.random.permutation(len(selection_ids)):
             # get the path from image id
-            train_id = selection[ind]
+            train_id = selection_ids[ind]
             in_files = glob.glob(input_dir + '%05d_00*.ARW' % train_id)
             in_path = in_files[np.random.random_integers(0, len(in_files) - 1)]
             in_fn = os.path.basename(in_path)
@@ -204,6 +224,7 @@ for epoch in range(lastepoch, epochs_to_train + 1):
                 # print(input_images[str(ratio)[0:3]][ind])
 
 
+    # trainin on every image from selection
     for ind in np.random.permutation(len(selection_fns)):
         # get the path from image id
         in_fn = selection_fns[ind]
@@ -258,8 +279,8 @@ for epoch in range(lastepoch, epochs_to_train + 1):
         output = np.minimum(np.maximum(output, 0), 1)
         g_loss[ind] = G_current
 
-        print("%d %d Loss=%.3f Time=%.3f" % (epoch, cnt, np.mean(g_loss[np.where(g_loss)]), time.time() - st))
-        
+        # print("%d %d Loss=%.3f Time=%.3f" % (epoch, cnt, np.mean(g_loss[np.where(g_loss)]), time.time() - st))
+
 
         if epoch % save_freq == 0:
             if not os.path.isdir(result_dir + '%04d' % epoch):
@@ -269,4 +290,65 @@ for epoch in range(lastepoch, epochs_to_train + 1):
             scipy.misc.toimage(temp * 255, high=255, low=0, cmin=0, cmax=255).save(
                 result_dir + '%04d/%05d_00_train_%d.jpg' % (epoch, train_id, ratio))
 
+    print("%d %d Loss=%.3f Time=%.3f" % (epoch, cnt, np.mean(g_loss[np.where(g_loss)]), time.time() - st))
+
+    # validate
+    # print("\nRunning validation and calculating validation loss")
+
+    for ind in np.random.permutation(len(val_ids)):
+        val_id = val_ids[ind]
+        in_files = glob.glob(input_dir + '%05d_00*.ARW' % val_id)
+        in_path = in_files[np.random.random_integers(0, len(in_files) - 1)]
+        in_fn = os.path.basename(in_path)
+
+        gt_files = glob.glob(gt_dir + '%05d_00*.ARW' % val_id)
+        gt_path = gt_files[0]
+        gt_fn = os.path.basename(gt_path)
+        in_exposure = float(in_fn[9:-5])
+        gt_exposure = float(gt_fn[9:-5])
+        ratio = min(gt_exposure / in_exposure, 300)
+
+        if val_input_images[str(ratio)[0:3]][ind] is None:
+            # print("Loading validation photo", in_fn, "to memory")
+
+            raw = rawpy.imread(in_path)
+            val_input_images[str(ratio)[0:3]][ind] = np.expand_dims(pack_raw(raw), axis=0) * ratio
+
+            gt_raw = rawpy.imread(gt_path)
+            im = gt_raw.postprocess(use_camera_wb=True, half_size=False, no_auto_bright=True, output_bps=16)
+            val_gt_images[ind] = np.expand_dims(np.float32(im / 65535.0), axis=0)
+
+        H = val_input_images[str(ratio)[0:3]][ind].shape[1]
+        W = val_input_images[str(ratio)[0:3]][ind].shape[2]
+
+        xx = np.random.randint(0, W - ps)
+        yy = np.random.randint(0, H - ps)
+        input_patch = val_input_images[str(ratio)[0:3]][ind][:, yy:yy + ps, xx:xx + ps, :]
+        gt_patch = val_gt_images[ind][:, yy * 2:yy * 2 + ps * 2, xx * 2:xx * 2 + ps * 2, :]
+
+        input_patch = np.minimum(input_patch, 1.0)
+
+        val_g_loss[ind] = sess.run(G_loss, feed_dict={in_image: input_patch, gt_image: gt_patch})
+
+    print("Epoch: %d   Validation_Loss=%.3f \n" % (epoch, np.mean(val_g_loss[np.where(val_g_loss)])))
+
     saver.save(sess, checkpoint_dir + 'model.ckpt')
+
+    epochs_trained_real_counter += 1
+    train_loss_list.append(np.mean(g_loss[np.where(g_loss)]))
+    val_loss_list.append(np.mean(val_g_loss[np.where(val_g_loss)]))
+
+epochs_range = range(epochs_trained_real_counter)
+
+plt.plot(epochs_range, train_loss_list, label='Training Loss')
+plt.plot(epochs_range, val_loss_list, label='Validation Loss')
+plt.legend(loc='upper right')
+plt.title('Training and Validation Loss')
+plt.show()
+
+plt.plot(train_loss_list)
+plt.title('Training Loss')
+plt.show()
+plt.plot(val_loss_list)
+plt.title('Validation Loss')
+plt.show()

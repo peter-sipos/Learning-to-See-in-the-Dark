@@ -10,7 +10,7 @@ import glob
 
 input_dir = './dataset/Sony_50_test/short/'
 gt_dir = './dataset/Sony_50_test/long/'
-checkpoint_dir = './checkpoint/Sony/'
+checkpoint_dir = './results/result_Sony_train_mine_1000e_75i_8.59s'
 result_dir = './result_Sony/'
 
 # get test IDs
