@@ -10,11 +10,19 @@ import glob
 import random
 import matplotlib.pyplot as plt
 from scipy import misc
+import time
+
+ps = 512  # patch size for training
+save_freq = 50
+selection_size = 75  # number of photos in selection
+epochs_to_train = 200
+amount_of_selections = 4  # number of different selections of images for training
+epochs_for_selection = round(epochs_to_train/amount_of_selections)  # epoch to train on one selection
 
 input_dir = './dataset/Sony/short/'
 gt_dir = './dataset/Sony/long/'
-checkpoint_dir = './results/result_Sony/'
-result_dir = './results/result_Sony/'
+checkpoint_dir = './results/'+os.path.basename(__file__)+'_'+str(epochs_to_train)+'e_'+str(selection_size)+'i_'+str(epochs_for_selection)+'s_'+time.strftime('%Y_%m_%d')+'/'
+result_dir = './results/'+os.path.basename(__file__)+'_'+str(epochs_to_train)+'e_'+str(selection_size)+'i_'+str(epochs_for_selection)+'s_'+time.strftime('%Y_%m_%d')+'/'
 
 # get train IDs
 train_fns = glob.glob(gt_dir + '0*.ARW')
@@ -24,12 +32,6 @@ train_ids = [int(os.path.basename(train_fn)[0:5]) for train_fn in train_fns]
 val_fns = glob.glob(gt_dir + '2*.ARW')
 val_ids = [int(os.path.basename(val_fn)[0:5]) for val_fn in val_fns]
 
-ps = 512  # patch size for training
-save_freq = 50
-selection_size = 75  # number of photos in selection
-epochs_to_train = 200
-amount_of_selections = 4  # number of different selections of images for training
-epochs_for_selection = round(epochs_to_train/amount_of_selections)  # epoch to train on one selection
 
 DEBUG = 0
 if DEBUG == 1:
@@ -53,43 +55,84 @@ def upsample_and_concat(x1, x2, output_channels, in_channels):
 
 
 def network(input):
+    input_shortcut = input
     conv1 = slim.conv2d(input, 32, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv1_1')
     conv1 = slim.conv2d(conv1, 32, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv1_2')
-    pool1 = slim.max_pool2d(conv1, [2, 2], padding='SAME')
+    conv_skip1 = slim.conv2d(input_shortcut, 32, [3, 3], rate=1, activation_fn=lrelu, scope='skip_connection1')
+    merge1 = tf.concat([conv1, conv_skip1], 3)
+    pool1 = slim.max_pool2d(merge1, [2, 2], padding='SAME')
 
-    conv2 = slim.conv2d(pool1, 64, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv2_1')
+    input_shortcut2 = pool1  # TODO NEPRIDAVAM TAKTO DO input_shortcut MIESTO TOHO ABY SOM TO PREPISOVAL????
+    conv2 = slim.conv2d(pool1, 64, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv2_1')   # TODO pool1 ma teraz tiez shape ,,,64 miesto povodnych ,,,32. NEVADI TO???
     conv2 = slim.conv2d(conv2, 64, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv2_2')
-    pool2 = slim.max_pool2d(conv2, [2, 2], padding='SAME')
+    conv_skip2 = slim.conv2d(input_shortcut2, 64, [3, 3], rate=1, activation_fn=lrelu, scope='skip_connection2')
+    merge2 = tf.concat([conv2, conv_skip2], 3)
+    pool2 = slim.max_pool2d(merge2, [2, 2], padding='SAME')
 
+    input_shortcut3 = pool2
     conv3 = slim.conv2d(pool2, 128, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv3_1')
     conv3 = slim.conv2d(conv3, 128, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv3_2')
-    pool3 = slim.max_pool2d(conv3, [2, 2], padding='SAME')
+    conv_skip3 = slim.conv2d(input_shortcut3, 128, [3, 3], rate=1, activation_fn=lrelu, scope='skip_connection3')
+    merge3 = tf.concat([conv3, conv_skip3], 3)
+    pool3 = slim.max_pool2d(merge3, [2, 2], padding='SAME')
 
+    input_shortcut4 = pool3
     conv4 = slim.conv2d(pool3, 256, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv4_1')
     conv4 = slim.conv2d(conv4, 256, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv4_2')
-    pool4 = slim.max_pool2d(conv4, [2, 2], padding='SAME')
+    conv_skip4 = slim.conv2d(input_shortcut4, 256, [3, 3], rate=1, activation_fn=lrelu, scope='skip_connection4')
+    merge4 = tf.concat([conv4, conv_skip4], 3)
+    pool4 = slim.max_pool2d(merge4, [2, 2], padding='SAME')
 
+    input_shortcut5 = pool4
     conv5 = slim.conv2d(pool4, 512, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv5_1')
     conv5 = slim.conv2d(conv5, 512, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv5_2')
+    conv_skip5 = slim.conv2d(input_shortcut5, 512, [3, 3], rate=1, activation_fn=lrelu, scope='skip_connection5')
+    merge5 = tf.concat([conv5, conv_skip5], 3)
 
-    up6 = upsample_and_concat(conv5, conv4, 256, 512)
+    # input_shortcut6 = merge5
+    # Ked bol input_shortcut = merge5 tak to davalao mismatched shape error.
+    # Dava to zmysel kedze merge 5 bol ,,,1024 tak up6 aby bol vysledok 512 tak musel zdvojnasobit tie dve prostredne
+    # TODO je korektnejsie nastavit input_shortcut na up6 alebo nejako zmensit poslednu axis v shape
+    #  po nastavanei na merge 5 (a da sa toto vobec?)?
+
+    # up6 = upsample_and_concat(conv5, conv4, 256, 512)
+    up6 = upsample_and_concat(merge5, conv4, 256, 1024)
+    input_shortcut6 = up6
     conv6 = slim.conv2d(up6, 256, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv6_1')
     conv6 = slim.conv2d(conv6, 256, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv6_2')
+    conv_skip6 = slim.conv2d(input_shortcut6, 256, [3, 3], rate=1, activation_fn=lrelu, scope='skip_connection6')
+    merge6 = tf.concat([conv6, conv_skip6], 3)
 
-    up7 = upsample_and_concat(conv6, conv3, 128, 256)
+    # input_shortcut7 = merge6
+    # up7 = upsample_and_concat(conv6, conv3, 128, 256)
+    up7 = upsample_and_concat(merge6, conv3, 128, 512)
+    input_shortcut7 = up7
     conv7 = slim.conv2d(up7, 128, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv7_1')
     conv7 = slim.conv2d(conv7, 128, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv7_2')
+    conv_skip7 = slim.conv2d(input_shortcut7, 128, [3, 3], rate=1, activation_fn=lrelu, scope='skip_connection7')
+    merge7 = tf.concat([conv7, conv_skip7], 3)
 
-    up8 = upsample_and_concat(conv7, conv2, 64, 128)
+    # input_shortcut8 = merge7
+    # up8 = upsample_and_concat(conv7, conv2, 64, 128)
+    up8 = upsample_and_concat(merge7, conv2, 64, 256)
+    input_shortcut8 = up8
     conv8 = slim.conv2d(up8, 64, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv8_1')
     conv8 = slim.conv2d(conv8, 64, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv8_2')
+    conv_skip8 = slim.conv2d(input_shortcut8, 64, [3, 3], rate=1, activation_fn=lrelu, scope='skip_connection8')
+    merge8 = tf.concat([conv8, conv_skip8], 3)
 
-    up9 = upsample_and_concat(conv8, conv1, 32, 64)
+    # input_shortcut9 = merge8
+    # up9 = upsample_and_concat(conv8, conv1, 32, 64)
+    up9 = upsample_and_concat(merge8, conv1, 32, 128)
+    input_shortcut9 = up9
     conv9 = slim.conv2d(up9, 32, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv9_1')
     conv9 = slim.conv2d(conv9, 32, [3, 3], rate=1, activation_fn=lrelu, scope='g_conv9_2')
+    conv_skip9 = slim.conv2d(input_shortcut9, 32, [3, 3], rate=1, activation_fn=lrelu, scope='skip_connection9')
+    merge9 = tf.concat([conv9, conv_skip9], 3)
 
-    conv10 = slim.conv2d(conv9, 12, [1, 1], rate=1, activation_fn=None, scope='g_conv10')
+    conv10 = slim.conv2d(merge9, 12, [1, 1], rate=1, activation_fn=None, scope='g_conv10')
     out = tf.depth_to_space(conv10, 2)
+
     return out
 
 
@@ -340,15 +383,25 @@ for epoch in range(lastepoch, epochs_to_train + 1):
 
 epochs_range = range(epochs_trained_real_counter)
 
+
 plt.plot(epochs_range, train_loss_list, label='Training Loss')
 plt.plot(epochs_range, val_loss_list, label='Validation Loss')
 plt.legend(loc='upper right')
 plt.title('Training and Validation Loss')
+plt.savefig(result_dir+'Training and Validation Loss.png', bbox_inches = 'tight')
 plt.show()
 
 plt.plot(train_loss_list)
 plt.title('Training Loss')
+plt.savefig(result_dir+'Training Loss.png', bbox_inches = 'tight')
 plt.show()
 plt.plot(val_loss_list)
 plt.title('Validation Loss')
+plt.savefig(result_dir+'Validation Loss.png', bbox_inches = 'tight')
 plt.show()
+
+num_of_losses_to_log = round(epochs_to_train/10)
+with open(result_dir+"losses.txt", "w") as losses_log:
+    for loss in reversed(range(1, num_of_losses_to_log+1)):
+        losses_log.write("Training loss: %.3f" % train_loss_list[-loss] + "\t\t" + "Validation loss: %.3f" % val_loss_list[-loss] + "\n")
+
