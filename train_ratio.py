@@ -22,7 +22,7 @@ epochs_for_selection = round(epochs_to_train/amount_of_selections)  # epoch to t
 input_dir = './dataset/Sony/short/'
 gt_dir = './dataset/Sony/long/'
 checkpoint_dir = './results/'+time.strftime('%Y_%m_%d-%H_%M')+'_'+os.path.basename(__file__)+'_'+str(epochs_to_train)+'e_'+str(selection_size)+'i_'+str(epochs_for_selection)+'s/'
-result_dir = './results/'+time.strftime('%%Y_%m_%d-%H_%M%m_%d')+'_'+os.path.basename(__file__)+'_'+str(epochs_to_train)+'e_'+str(selection_size)+'i_'+str(epochs_for_selection)+'s/'
+result_dir = './results/'+time.strftime('%Y_%m_%d-%H_%M')+'_'+os.path.basename(__file__)+'_'+str(epochs_to_train)+'e_'+str(selection_size)+'i_'+str(epochs_for_selection)+'s/'
 
 # get train IDs
 train_fns = glob.glob(gt_dir + '0*.ARW')
@@ -124,7 +124,7 @@ def network(input):
     # conv10 = slim.conv2d(merge9, 12, [1, 1], rate=1, activation_fn=None, scope='g_conv10')
     # out = tf.depth_to_space(conv10, 2)
 
-    out = slim.conv2d(merge9, 3, [1, 1], rate=1, activation_fn=None, scope='g_conv10')          # TODO je toto validny output? Asi hej, nema preco nebyt
+    out = slim.conv2d(merge9, 3, [1, 1], rate=1, activation_fn=None, scope='g_conv10')
     return out
 
 
@@ -165,7 +165,7 @@ if ckpt:
 
 
 g_loss = np.zeros((5000, 1))
-val_g_loss = np.zeros((5000, 1))        #TODO toto zrejme nemusi byt az 5000?
+val_g_loss = np.zeros((5000, 1))
 train_loss_list = []
 val_loss_list = []
 
@@ -191,8 +191,7 @@ val_input_images['100'] = [None] * len(val_ids)
 epochs_trained_real_counter = 0
 
 # training
-# for epoch in range(lastepoch, epochs_to_train + 1): # TODO ma to tu +1 nejaky vyznam??? Podla mna nie
-for epoch in range(lastepoch, epochs_to_train):
+for epoch in range(lastepoch, epochs_to_train + 1):
     if os.path.isdir(result_dir + '%04d' % epoch):
         continue
     cnt = 0
@@ -231,20 +230,14 @@ for epoch in range(lastepoch, epochs_to_train):
 
             if input_images[str(ratio)[0:3]][ind] is None:
                 raw = rawpy.imread(in_path)
-                # input_images[str(ratio)[0:3]][ind] = np.expand_dims(pack_raw(raw), axis=0) * ratio
-                # raw_dummy = np.expand_dims(pack_raw(raw), axis=0) * ratio
-
                 in_raw = raw.postprocess(use_camera_wb=True, half_size=False, no_auto_bright=True, output_bps=16)
-                input_images[str(ratio)[0:3]][ind] = np.expand_dims(np.float32(in_raw / 65535.0), axis=0) * ratio       # TODO *ratio nasoby hodnoty v ktorych rozmeroch? Repsektive co to tu robi?
-                # *ratio mi zrejme robi neplechu -> hodnoty v poli (jednotlive pixely?) su moc velke, max je dokonca nad 2.x
-                # input_images[str(ratio)[0:3]][ind] = np.expand_dims(np.float32(in_raw / 65535.0), axis=0)
+                input_images[str(ratio)[0:3]][ind] = np.expand_dims(np.float32(in_raw / 65535.0), axis=0) * ratio
 
                 gt_raw = rawpy.imread(gt_path)
                 im = gt_raw.postprocess(use_camera_wb=True, half_size=False, no_auto_bright=True, output_bps=16)
-                gt_images[ind] = np.expand_dims(np.float32(im / 65535.0), axis=0)                                       # TODO / 65535 je verim na norzmalizaciu. 65535 by zrejme mala byt najvyssia hodnota pixelu? No preco je to tak?
+                gt_images[ind] = np.expand_dims(np.float32(im / 65535.0), axis=0)
 
                 selection_fns[ind] = in_fn
-
 
 
     # trainin on every image from selection
@@ -258,23 +251,18 @@ for epoch in range(lastepoch, epochs_to_train):
         gt_fn = os.path.basename(gt_path)
         in_exposure = float(in_fn[9:-5])
         gt_exposure = float(gt_fn[9:-5])
-        ratio = min(gt_exposure / in_exposure, 300)                  #TODO spravit funkciu 'get ratio'
+        ratio = min(gt_exposure / in_exposure, 300)
 
         st = time.time()
         cnt += 1
 
-        # before crop
-        input_before_crop = input_images[str(ratio)[0:3]][ind]
-        gt_before_crop = gt_images[ind]
-
         # crop
-        H = input_images[str(ratio)[0:3]][ind].shape[1]                                     # width a height kalkulovane z inputu ktory je teraz dvojnasobny ako povodne
+        H = input_images[str(ratio)[0:3]][ind].shape[1]
         W = input_images[str(ratio)[0:3]][ind].shape[2]
 
         xx = np.random.randint(0, W - ps)
         yy = np.random.randint(0, H - ps)
         input_patch = input_images[str(ratio)[0:3]][ind][:, yy:yy + ps, xx:xx + ps, :]
-        # gt_patch = gt_images[ind][:, yy * 2:yy * 2 + ps * 2, xx * 2:xx * 2 + ps * 2, :]     # kvoli tomu hore ked je momentalne xx == 2858, tak ked to dam na *2 tak som out of image
         gt_patch = gt_images[ind][:, yy:yy + ps, xx:xx + ps, :]
 
         if np.random.randint(2, size=1)[0] == 1:  # random flip
@@ -326,7 +314,6 @@ for epoch in range(lastepoch, epochs_to_train):
             # print("Loading validation photo", in_fn, "to memory")
 
             raw = rawpy.imread(in_path)
-            # val_input_images[str(ratio)[0:3]][ind] = np.expand_dims(pack_raw(raw), axis=0) * ratio
             in_raw = raw.postprocess(use_camera_wb=True, half_size=False, no_auto_bright=True, output_bps=16)
             val_input_images[str(ratio)[0:3]][ind] = np.expand_dims(np.float32(in_raw / 65535.0), axis=0) * ratio
 
@@ -334,13 +321,13 @@ for epoch in range(lastepoch, epochs_to_train):
             im = gt_raw.postprocess(use_camera_wb=True, half_size=False, no_auto_bright=True, output_bps=16)
             val_gt_images[ind] = np.expand_dims(np.float32(im / 65535.0), axis=0)
 
+
         H = val_input_images[str(ratio)[0:3]][ind].shape[1]
         W = val_input_images[str(ratio)[0:3]][ind].shape[2]
 
         xx = np.random.randint(0, W - ps)
         yy = np.random.randint(0, H - ps)
         input_patch = val_input_images[str(ratio)[0:3]][ind][:, yy:yy + ps, xx:xx + ps, :]
-        # gt_patch = val_gt_images[ind][:, yy * 2:yy * 2 + ps * 2, xx * 2:xx * 2 + ps * 2, :]     
         gt_patch = val_gt_images[ind][:, yy:yy + ps, xx:xx + ps, :]
 
         input_patch = np.minimum(input_patch, 1.0)
@@ -379,4 +366,3 @@ with open(result_dir+"losses.txt", "w") as losses_log:
     for loss in reversed(range(1, num_of_losses_to_log+1)):
         losses_log.write("Training loss: %.3f" % train_loss_list[-loss] + "\t\t" + "Validation loss: %.3f" % val_loss_list[-loss] + "\n")
 
-# TODO add timers for loading photos, for one epoch and for the whole trainng
