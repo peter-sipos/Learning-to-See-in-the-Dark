@@ -186,8 +186,8 @@ val_input_images['300'] = [None] * len(val_ids)
 val_input_images['250'] = [None] * len(val_ids)
 val_input_images['100'] = [None] * len(val_ids)
 
-epochs_trained_real_counter = 0
 
+training_start_time = time.time()
 # training
 for epoch in range(lastepoch, epochs_to_train + 1):
     if os.path.isdir(result_dir + '%04d' % epoch):
@@ -211,6 +211,7 @@ for epoch in range(lastepoch, epochs_to_train + 1):
         input_images['100'] = [None] * len(selection_ids)
 
         print("Loading new photos to memory")
+        st = time.time()
 
         for ind in np.random.permutation(len(selection_ids)):
             # get the path from image id
@@ -236,8 +237,11 @@ for epoch in range(lastepoch, epochs_to_train + 1):
 
                 selection_fns[ind] = in_fn
 
+        print("New photos loaded in %.3f seconds" % (time.time() - st))
+
 
     # trainin on every image from selection
+    st = time.time()
     for ind in np.random.permutation(len(selection_fns)):
         # get the path from image id
         in_fn = selection_fns[ind]
@@ -250,8 +254,6 @@ for epoch in range(lastepoch, epochs_to_train + 1):
         gt_exposure = float(gt_fn[9:-5])
         ratio = min(gt_exposure / in_exposure, 300)
 
-        st = time.time()
-        cnt += 1
 
         # crop
         H = input_images[str(ratio)[0:3]][ind].shape[1]
@@ -290,10 +292,11 @@ for epoch in range(lastepoch, epochs_to_train + 1):
             scipy.misc.toimage(temp * 255, high=255, low=0, cmin=0, cmax=255).save(
                 result_dir + '%04d/%05d_00_train_%d.jpg' % (epoch, train_id, ratio))
 
-    print("%d %d Loss=%.3f Time=%.3f" % (epoch, cnt, np.mean(g_loss[np.where(g_loss)]), time.time() - st))
+    print("Epoch: %d Loss=%.3f Time=%.3f" % (epoch, np.mean(g_loss[np.where(g_loss)]), time.time() - st))
 
     # validate
     # print("\nRunning validation and calculating validation loss")
+    st = time.time()
     for ind in np.random.permutation(len(val_ids)):
         val_id = val_ids[ind]
         in_files = glob.glob(input_dir + '%05d_00*.ARW' % val_id)
@@ -308,8 +311,6 @@ for epoch in range(lastepoch, epochs_to_train + 1):
         ratio = min(gt_exposure / in_exposure, 300)
 
         if val_input_images[str(ratio)[0:3]][ind] is None:
-            # print("Loading validation photo", in_fn, "to memory")
-
             raw = rawpy.imread(in_path)
             val_input_images[str(ratio)[0:3]][ind] = np.expand_dims(pack_raw(raw), axis=0) * ratio
 
@@ -330,19 +331,22 @@ for epoch in range(lastepoch, epochs_to_train + 1):
 
         val_g_loss[ind] = sess.run(G_loss, feed_dict={in_image: input_patch, gt_image: gt_patch})
 
-    print("Epoch: %d   Validation_Loss=%.3f \n" % (epoch, np.mean(val_g_loss[np.where(val_g_loss)])))
+    print("Epoch: %d Validation_Loss=%.3f Time=%.3f \n" % (epoch, np.mean(val_g_loss[np.where(val_g_loss)]), time.time() - st))
 
     saver.save(sess, checkpoint_dir + 'model.ckpt')
 
-    epochs_trained_real_counter += 1
     train_loss_list.append(np.mean(g_loss[np.where(g_loss)]))
     val_loss_list.append(np.mean(val_g_loss[np.where(val_g_loss)]))
 
-epochs_range = range(epochs_trained_real_counter)
+# source: https://stackoverflow.com/questions/27779677/how-to-format-elapsed-time-from-seconds-to-hours-minutes-seconds-and-milliseco
+training_end_time = time.time()
+hours, rem = divmod(training_end_time-training_start_time, 3600)
+minutes, seconds = divmod(rem, 60)
+print("Training finished in", "{:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
 
 
-plt.plot(epochs_range, train_loss_list, label='Training Loss')
-plt.plot(epochs_range, val_loss_list, label='Validation Loss')
+plt.plot(train_loss_list, label='Training Loss')
+plt.plot(val_loss_list, label='Validation Loss')
 plt.legend(loc='upper right')
 plt.title('Training and Validation Loss')
 plt.savefig(result_dir+'Training and Validation Loss.png', bbox_inches = 'tight')
