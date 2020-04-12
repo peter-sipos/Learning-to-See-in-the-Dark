@@ -11,7 +11,7 @@ import glob
 input_dir = './dataset/Sony/short/'
 gt_dir = './dataset/Sony/long/'
 checkpoint_dir = './checkpoint/Sony/'
-result_dir = './result_Sony/'
+result_dir = './results/test_original/'
 
 # get test IDs
 test_fns = glob.glob(gt_dir + '/1*.ARW')

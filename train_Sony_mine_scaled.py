@@ -22,7 +22,7 @@ epochs_for_selection = round(epochs_to_train/amount_of_selections)  # epoch to t
 input_dir = './dataset/Sony/short/'
 gt_dir = './dataset/Sony/long/'
 checkpoint_dir = './results/'+time.strftime('%Y_%m_%d-%H_%M')+'_'+os.path.basename(__file__)+'_'+str(epochs_to_train)+'e_'+str(selection_size)+'i_'+str(epochs_for_selection)+'s/'
-result_dir = './results/'+time.strftime('%%Y_%m_%d-%H_%M%m_%d')+'_'+os.path.basename(__file__)+'_'+str(epochs_to_train)+'e_'+str(selection_size)+'i_'+str(epochs_for_selection)+'s/'
+result_dir = './results/'+time.strftime('%Y_%m_%d-%H_%M')+'_'+os.path.basename(__file__)+'_'+str(epochs_to_train)+'e_'+str(selection_size)+'i_'+str(epochs_for_selection)+'s/'
 
 # get train IDs
 train_fns = glob.glob(gt_dir + '0*.ARW')
@@ -191,8 +191,7 @@ val_input_images['100'] = [None] * len(val_ids)
 epochs_trained_real_counter = 0
 
 # training
-# for epoch in range(lastepoch, epochs_to_train + 1): # TODO ma to tu +1 nejaky vyznam??? Podla mna nie
-for epoch in range(lastepoch, epochs_to_train):
+for epoch in range(lastepoch, epochs_to_train + 1):
     if os.path.isdir(result_dir + '%04d' % epoch):
         continue
     cnt = 0
@@ -235,13 +234,19 @@ for epoch in range(lastepoch, epochs_to_train):
                 # raw_dummy = np.expand_dims(pack_raw(raw), axis=0) * ratio
 
                 in_raw = raw.postprocess(use_camera_wb=True, half_size=False, no_auto_bright=True, output_bps=16)
-                input_images[str(ratio)[0:3]][ind] = np.expand_dims(np.float32(in_raw / 65535.0), axis=0) * ratio       # TODO *ratio nasoby hodnoty v ktorych rozmeroch? Repsektive co to tu robi?
+                # input_images[str(ratio)[0:3]][ind] = np.expand_dims(np.float32(in_raw / 65535.0), axis=0) * ratio       # TODO *ratio nasoby hodnoty v ktorych rozmeroch? Repsektive co to tu robi?
                 # *ratio mi zrejme robi neplechu -> hodnoty v poli (jednotlive pixely?) su moc velke, max je dokonca nad 2.x
                 # input_images[str(ratio)[0:3]][ind] = np.expand_dims(np.float32(in_raw / 65535.0), axis=0)
+
 
                 gt_raw = rawpy.imread(gt_path)
                 im = gt_raw.postprocess(use_camera_wb=True, half_size=False, no_auto_bright=True, output_bps=16)
                 gt_images[ind] = np.expand_dims(np.float32(im / 65535.0), axis=0)                                       # TODO / 65535 je verim na norzmalizaciu. 65535 by zrejme mala byt najvyssia hodnota pixelu? No preco je to tak?
+
+                im = np.expand_dims(np.float32(in_raw / 65535.0), axis=0)
+                im = im * np.mean(gt_images[ind]) / np.mean(im)
+                input_images[str(ratio)[0:3]][ind] = im
+
 
                 selection_fns[ind] = in_fn
 
@@ -328,11 +333,16 @@ for epoch in range(lastepoch, epochs_to_train):
             raw = rawpy.imread(in_path)
             # val_input_images[str(ratio)[0:3]][ind] = np.expand_dims(pack_raw(raw), axis=0) * ratio
             in_raw = raw.postprocess(use_camera_wb=True, half_size=False, no_auto_bright=True, output_bps=16)
-            val_input_images[str(ratio)[0:3]][ind] = np.expand_dims(np.float32(in_raw / 65535.0), axis=0) * ratio
+            # val_input_images[str(ratio)[0:3]][ind] = np.expand_dims(np.float32(in_raw / 65535.0), axis=0)
+            # val_input_images[str(ratio)[0:3]][ind] = np.expand_dims(np.float32(in_raw / 65535.0), axis=0) * ratio
 
             gt_raw = rawpy.imread(gt_path)
             im = gt_raw.postprocess(use_camera_wb=True, half_size=False, no_auto_bright=True, output_bps=16)
             val_gt_images[ind] = np.expand_dims(np.float32(im / 65535.0), axis=0)
+
+            im = np.expand_dims(np.float32(in_raw / 65535.0), axis=0)
+            im = im * np.mean(val_gt_images[ind]) / np.mean(im)
+            val_input_images[str(ratio)[0:3]][ind] = im
 
         H = val_input_images[str(ratio)[0:3]][ind].shape[1]
         W = val_input_images[str(ratio)[0:3]][ind].shape[2]
@@ -340,7 +350,7 @@ for epoch in range(lastepoch, epochs_to_train):
         xx = np.random.randint(0, W - ps)
         yy = np.random.randint(0, H - ps)
         input_patch = val_input_images[str(ratio)[0:3]][ind][:, yy:yy + ps, xx:xx + ps, :]
-        # gt_patch = val_gt_images[ind][:, yy * 2:yy * 2 + ps * 2, xx * 2:xx * 2 + ps * 2, :]     
+        # gt_patch = val_gt_images[ind][:, yy * 2:yy * 2 + ps * 2, xx * 2:xx * 2 + ps * 2, :]
         gt_patch = val_gt_images[ind][:, yy:yy + ps, xx:xx + ps, :]
 
         input_patch = np.minimum(input_patch, 1.0)
