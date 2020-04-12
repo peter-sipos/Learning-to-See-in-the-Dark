@@ -11,6 +11,7 @@ import random
 import matplotlib.pyplot as plt
 from scipy import misc
 import time
+import pickle
 
 ps = 512  # patch size for training
 save_freq = 200
@@ -165,14 +166,31 @@ if ckpt:
 
 
 g_loss = np.zeros((5000, 1))
-val_g_loss = np.zeros((5000, 1))        #TODO toto zrejme nemusi byt az 5000?
-train_loss_list = []
-val_loss_list = []
+val_g_loss = np.zeros((5000, 1))
 
-allfolders = glob.glob(result_dir + '*0')
+if os.path.exists(checkpoint_dir + "train_loss_list_dump.txt"):
+    with open(checkpoint_dir + "train_loss_list_dump.txt", "rb") as dump:
+        train_loss_list = pickle.load(dump)
+    print("loaded training losses", )
+else:
+    train_loss_list = []
+if os.path.exists(checkpoint_dir + "val_loss_list_dump.txt"):
+    with open(checkpoint_dir + "val_loss_list_dump.txt", "rb") as dump:
+        val_loss_list = pickle.load(dump)
+    print("loaded validation losses")
+else:
+    val_loss_list = []
+if os.path.exists(checkpoint_dir + "training_time_dump.txt"):
+    with open(checkpoint_dir + "training_time_dump.txt", "rb") as dump:
+        training_time_previous = pickle.load(dump)
+    print("loaded training time")
+else:
+    training_time_previous = 0
+
+allfolders = glob.glob(checkpoint_dir + "*/")
 lastepoch = 0
 for folder in allfolders:
-    lastepoch = np.maximum(lastepoch, int(folder[-4:]))
+    lastepoch = np.maximum(lastepoch, int(folder[-5:-1]))
 
 learning_rate = 1e-4
 
@@ -191,7 +209,7 @@ val_input_images['100'] = [None] * len(val_ids)
 
 training_start_time = time.time()
 # training
-for epoch in range(lastepoch, epochs_to_train + 1):
+for epoch in range(lastepoch + 1, epochs_to_train + 1):
     if os.path.isdir(result_dir + '%04d' % epoch):
         continue
     cnt = 0
@@ -199,7 +217,7 @@ for epoch in range(lastepoch, epochs_to_train + 1):
         learning_rate = 1e-5
 
     # loading new selection
-    if first_run or epoch % epochs_for_selection == 0:
+    if (first_run or epoch % epochs_for_selection == 0) and epoch != epochs_to_train:
 
         first_run = False
 
@@ -291,7 +309,7 @@ for epoch in range(lastepoch, epochs_to_train + 1):
         # print("%d %d Loss=%.3f Time=%.3f" % (epoch, cnt, np.mean(g_loss[np.where(g_loss)]), time.time() - st))
 
 
-        if epoch % save_freq == 0:
+        if epoch % save_freq == 0 or epoch == epochs_to_train:
             if not os.path.isdir(result_dir + '%04d' % epoch):
                 os.makedirs(result_dir + '%04d' % epoch)
 
@@ -350,9 +368,23 @@ for epoch in range(lastepoch, epochs_to_train + 1):
 
 # source: https://stackoverflow.com/questions/27779677/how-to-format-elapsed-time-from-seconds-to-hours-minutes-seconds-and-milliseco
 training_end_time = time.time()
-hours, rem = divmod(training_end_time-training_start_time, 3600)
+training_time_this = training_end_time - training_start_time
+hours, rem = divmod(training_time_this, 3600)
 minutes, seconds = divmod(rem, 60)
-print("Training finished in", "{:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
+print("Training finished in", "{:0>2}:{:0>2}:{:05.2f}".format(int(hours), int(minutes), seconds))
+
+training_time_total = training_time_this + training_time_previous
+hours, rem = divmod(training_time_total, 3600)
+minutes, seconds = divmod(rem, 60)
+print("Total training time", "{:0>2}:{:0>2}:{:05.2f}".format(int(hours), int(minutes), seconds))
+
+
+with open(result_dir + "train_loss_list_dump.txt", "wb") as dump:
+    pickle.dump(train_loss_list, dump)
+with open(result_dir + "val_loss_list_dump.txt", "wb") as dump:
+    pickle.dump(val_loss_list, dump)
+with open(result_dir + "training_time_dump.txt", "wb") as dump:
+    pickle.dump(training_time_total, dump)
 
 
 plt.plot(train_loss_list, label='Training Loss')
@@ -372,7 +404,7 @@ plt.savefig(result_dir+'Validation Loss.png', bbox_inches = 'tight')
 plt.show()
 
 num_of_losses_to_log = round(epochs_to_train/10)
-with open(result_dir+"losses.txt", "w") as losses_log:
+with open(result_dir + "losses.txt", "w") as losses_log:
     for loss in reversed(range(1, num_of_losses_to_log+1)):
         losses_log.write("Training loss: %.3f" % train_loss_list[-loss] + "\t\t" + "Validation loss: %.3f" % val_loss_list[-loss] + "\n")
 
