@@ -15,9 +15,9 @@ import pickle
 
 ps = 512  # patch size for training
 save_freq = 200
-selection_size = 40  # number of photos in selection
-epochs_to_train = 2000
-amount_of_selections = 60  # number of different selections of images for training
+selection_size = 75  # number of photos in selection
+epochs_to_train = 4000
+amount_of_selections = 40  # number of different selections of images for training
 epochs_for_selection = round(epochs_to_train/amount_of_selections)  # epoch to train on one selection
 
 input_dir = './dataset/Sony/short/'
@@ -278,6 +278,13 @@ for epoch in range(lastepoch + 1, epochs_to_train + 1):
             scipy.misc.toimage(temp * 255, high=255, low=0, cmin=0, cmax=255).save(
                 result_dir + '%04d/%05d_00_train_%d.jpg' % (epoch, train_id, ratio))
 
+            with open(result_dir + "train_loss_list_dump.txt", "wb") as dump:
+                pickle.dump(train_loss_list, dump)
+            with open(result_dir + "val_loss_list_dump.txt", "wb") as dump:
+                pickle.dump(val_loss_list, dump)
+            with open(result_dir + "training_time_dump.txt", "wb") as dump:
+                pickle.dump(time.time() - training_start_time + training_time_previous, dump)
+
     print("Epoch: %d Loss=%.3f Time=%.3f" % (epoch, np.mean(g_loss[np.where(g_loss)]), time.time() - st))
 
     # validate
@@ -319,7 +326,7 @@ for epoch in range(lastepoch + 1, epochs_to_train + 1):
 
     print("Epoch: %d Validation_Loss=%.3f Time=%.3f \n" % (epoch, np.mean(val_g_loss[np.where(val_g_loss)]), time.time() - st))
 
-    saver.save(sess, checkpoint_dir + 'model.ckpt')
+    saver.save(sess, result_dir + 'model.ckpt')
 
     train_loss_list.append(np.mean(g_loss[np.where(g_loss)]))
     val_loss_list.append(np.mean(val_g_loss[np.where(val_g_loss)]))
