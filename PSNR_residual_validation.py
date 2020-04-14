@@ -2,32 +2,23 @@ import glob
 import os
 import time
 import numpy as np
-import math
 import cv2
+from skimage.measure import compare_psnr
 
-input_dir_sol1 = './results/test_residual_4000/final/'
-input_dir_sol2 = './results/test_validation_and_batch_4000/final/'
+input_dir_sol1 = './results/test_original/final/'
+input_dir_sol2 = './results/test_residual_4000/final/'
 
 sol1_name = ''.join(input_dir_sol1.split('/')[2].split('_', 1)[1:])     # to get to the name of the tested solution
 sol2_name = ''.join(input_dir_sol2.split('/')[2].split('_', 1)[1:])
 
-result_dir = "./results/evaluation/" + time.strftime('%Y_%m_%d-%H_%M') + "_" + sol1_name + "_vs_" + sol2_name + ".txt"
-
-# source: https://dsp.stackexchange.com/questions/38065/peak-signal-to-noise-ratio-psnr-in-python-for-an-image
-def psnr(img1, img2):
-    mse = np.mean((img1 - img2) ** 2)
-    if mse == 0:
-        return 100
-    PIXEL_MAX = 255.0
-    return 20 * math.log10(PIXEL_MAX / math.sqrt(mse))
-
+result_dir = "./results/evaluation/" + time.strftime('%Y_%m_%d') + "_PSNR_" + sol1_name + "_vs_" + sol2_name + ".txt"
 
 def calculate_psnr_for_ratio(list, fns_gt, fns_out):
     for index in range(len(fns_gt)):
         gt_image = cv2.imread(fns_gt[index])
         out_image = cv2.imread(fns_out[index])
 
-        list.append(psnr(gt_image, out_image))
+        list.append(compare_psnr(gt_image, out_image))
 
 
 # create lists to store psnr for ratios
@@ -131,6 +122,8 @@ with open(result_dir, "w") as psnr_log:
           file=psnr_log)
     print("Average", sol1_name, "whole:", average_sol1_whole, "\t", "Average", sol2_name, "whole:", average_sol2_whole,
           file=psnr_log)
+    print(file=psnr_log)
+
     print("Number of evaluated files:", "\t", sol1_name, total_sol1_evaluations, "\t", sol2_name, total_sol2_evaluations, file=psnr_log)
     print(file=psnr_log)
 
