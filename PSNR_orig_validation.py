@@ -6,12 +6,13 @@ import cv2
 from skimage.measure import compare_psnr
 
 input_dir_sol1 = './results/test_original/final/'
-input_dir_sol2 = './results/test_residual_4000/final/'
+input_dir_sol2 = './results/test_validation_and_batch_4000/final/'
 
-sol1_name = ''.join(input_dir_sol1.split('/')[2].split('_', 1)[1:])     # to get to the name of the tested solution
-sol2_name = ''.join(input_dir_sol2.split('/')[2].split('_', 1)[1:])
+sol1_name = ''.join(input_dir_sol1.split('/')[2].split('_')[1])  # to get to the name of the tested solution
+sol2_name = ''.join(input_dir_sol2.split('/')[2].split('_')[1])
 
 result_dir = "./results/evaluation/" + time.strftime('%Y_%m_%d') + "_PSNR_" + sol1_name + "_vs_" + sol2_name + ".txt"
+
 
 def calculate_psnr_for_ratio(list, fns_gt, fns_out):
     for index in range(len(fns_gt)):
@@ -114,6 +115,9 @@ total_sol1_evaluations = len(sol1_100) + len(sol1_250) + len(sol1_300)
 total_sol2_evaluations = len(sol2_100) + len(sol2_250) + len(sol2_300)
 
 with open(result_dir, "w") as psnr_log:
+    print("Full solution1 path:", input_dir_sol1, "\t", "Full solution2 path:", input_dir_sol2, file=psnr_log)
+    print(file=psnr_log)
+
     print("Average", sol1_name, "100:", average_sol1_100, "\t", "Average", sol2_name, "100:", average_sol2_100,
           file=psnr_log)
     print("Average", sol1_name, "250:", average_sol1_250, "\t", "Average", sol2_name, "250:", average_sol2_250,
@@ -124,7 +128,8 @@ with open(result_dir, "w") as psnr_log:
           file=psnr_log)
     print(file=psnr_log)
 
-    print("Number of evaluated files:", "\t", sol1_name, total_sol1_evaluations, "\t", sol2_name, total_sol2_evaluations, file=psnr_log)
+    print("Number of evaluated files:", "\t", sol1_name, total_sol1_evaluations, "\t", sol2_name,
+          total_sol2_evaluations, file=psnr_log)
     print(file=psnr_log)
 
     for index in range(len(ratio_100_gt)):
